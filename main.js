@@ -2,56 +2,10 @@ var http = require('http');
 var url = require('url')
 var fs = require('fs');
 var qs = require('querystring');
+var path = require('path');
+var sanitizeHTML = require('sanitize-html');
 
-// 실질적으로 사용자에게 보여주는 part. (HTML 파일)
-// template. title, list, body를 통해 제목, 리스트, body를 결정함
-/*
-  title
-  list
-  (
-    listTemplate
-  )
-  body
-*/
-function templateHTML(title, list, body, control){
-  return `
-  <!doctype html>
-  <html>
-  <head>
-    <title>WEB1 - ${title}</title>
-    <meta charset="utf-8">
-  </head>
-  <body>
-    <h1><a href="/">WEB</a></h1>
-    ${list}
-    ${control}
-    ${body}
-  </body>
-  </html>
-  `;
-}
-
-// list의 template
-// 상단 templateHTML함수의 list부분 참고.
-/*
-  list(
-    1
-    2
-    3
-    // listTemplate
-  )
-*/
-function listTemplate(filelist){
-  var list = '<ul>';
-  var i = 0;
-  while(i < filelist.length){
-    list = list + `<li><a href="/?id=${filelist[i]}">${filelist[i]}</a></li>`;
-    i++;
-  }
-  list +='</ul>';
-
-  return list;
-}
+var template = require('./lib/template.js')
 
 var app = http.createServer(function(request,response){
     var _url = request.url;
@@ -65,25 +19,36 @@ var app = http.createServer(function(request,response){
             // readdir을 통해 filelist라는 배열 형태로 파일들을 불러올 수 있음. ['CSS', 'HTML', 'JavaScript']
             var title = 'Welcome!';
             var description = 'Hello, Node.js!';
-            var list = listTemplate(filelist);
-            var template = templateHTML(title, list,
-              `<h2>${title}</h2><p>${description}</p>`,
-              `<a href="/create">create</a>`);
-          response.writeHead(200);
-          response.end(template);
+
+
+          var list = template.list(filelist);
+          var html = template.HTML(title, list,
+            `<h2>${title}</h2><p>${description}</p>`,
+            `<a href="/create">create</a>`);
+            response.writeHead(200);
+            response.end(html);
         });
       } else {
           // root가 아닌 경우. Content Reading 부분.
           fs.readdir('./data', function(error, filelist){
             // queryData에서 id값을 받아온 뒤, 해당 id값에 해당하는 file을 불러와 description에 활용.
-            fs.readFile(`data/${queryData.id}`, 'utf8', function(err, description){
+            var filteredID = path.parse(queryData.id).base;
+            fs.readFile(`data/${filteredID}`, 'utf8', function(err, description){
                 var title = queryData.id;
-                var list = listTemplate(filelist);
-                var template = templateHTML(title, list,
-                `<h2>${title}</h2><p>${description}</p>`,
-                `<a href="/create">create</a> <a href="/update?id=${title}">update</a>`);
+                var sanitizedTitle = sanitizeHTML(title);
+                var sanitizedDescription = sanitizeHTML(description);
+                var list = template.list(filelist);
+                var html = template.HTML(title, list,
+                `<h2>${sanitizedTitle}</h2><p>${sanitizedDescription}</p>`,
+                `<a href="/create">create</a>
+                <a href="/update?id=${sanitizedTitle}">update</a>
+                <form action="delete_process" method="post">
+                  <input type="hidden" name="id" value="${sanitizedTitle}">
+                  <input type="submit" value="delete">
+                </form>
+                `);
             response.writeHead(200);
-            response.end(template);
+            response.end(html);
             });
         });
       }
@@ -92,8 +57,8 @@ var app = http.createServer(function(request,response){
       fs.readdir('./data', function(error, filelist){
         // readdir을 통해 filelist라는 배열 형태로 파일들을 불러올 수 있음. ['CSS', 'HTML', 'JavaScript']
         var title = 'WEB - Create';
-        var list = listTemplate(filelist);
-        var template = templateHTML(title, list,`
+        var list = template.list(filelist);
+        var html = template.HTML(title, list,`
           <form action="/create_process" method="post">
           <p><input type="text" name="title" placeholder="title"></p>
           <p>
@@ -105,7 +70,7 @@ var app = http.createServer(function(request,response){
           </form>
           `, '');
       response.writeHead(200);
-      response.end(template);
+      response.end(html);
     });
       // 실제 Create가 수행되는 부분. 파일 저장하는 부분임.
     } else if(pathname === '/create_process') {
@@ -132,10 +97,11 @@ var app = http.createServer(function(request,response){
     } else if (pathname === '/update') {
       fs.readdir('./data', function(error, filelist){
         // queryData에서 id값을 받아온 뒤, 해당 id값에 해당하는 file을 불러와 description에 활용.
-        fs.readFile(`data/${queryData.id}`, 'utf8', function(err, description){
+        var filteredID = path.parse(queryData.id).base;
+        fs.readFile(`data/${filteredID}`, 'utf8', function(err, description){
             var title = queryData.id;
-            var list = listTemplate(filelist);
-            var template = templateHTML(title, list,
+            var list = template.list(filelist);
+            var html = template.HTML(title, list,
             `
             <form action="/update_process" method="post">
             <input type="hidden" name="id" value="${title}">
@@ -150,7 +116,7 @@ var app = http.createServer(function(request,response){
             `,
             `<a href="/create">create</a> <a href="/update?id=${title}">update</a>`);
         response.writeHead(200);
-        response.end(template);
+        response.end(html);
         });
     });
   } else if (pathname === '/update_process') {
@@ -177,6 +143,25 @@ var app = http.createServer(function(request,response){
         }); })
     });
 
+  } else if (pathname === '/delete_process') {
+    var body = '';
+
+    // Post Data 수신하는 부분.
+    // 콜백이 조각조각 실행되는거라 보면 됨. 한번에 다 받으면 죽을 수 있으니까.. (데이터가 너무 크면)
+    request.on('data', function(data){
+        body += data;
+    });
+
+    request.on('end', function(){
+      // 데이터 수신이 끝날 시 post data에 post 정보를 넣어줌.
+      var post = qs.parse(body);
+      var id = post.id
+      // file delete
+      fs.unlink(`data/${id}`, function(error){
+        response.writeHead(302, {Location: `/`});
+        response.end('');
+      });
+    });
   } else {
       // 404 Error 처리
       response.writeHead(404);
