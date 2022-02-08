@@ -40,7 +40,6 @@ var app = http.createServer(function(request,response){
       } else {
         db.query(`SELECT * FROM topic`, function(error, topics){
           if(error){throw error;}
-
         // root가 아닌 경우. Content Reading 부분.
         db.query(`SELECT * FROM topic WHERE id=?`,[queryData.id], function(error2, topic){
           if(error2){throw error2;}
@@ -64,21 +63,24 @@ var app = http.createServer(function(request,response){
       }
     } else if(pathname === '/create') {
       // Content Create(쓰기) 부분
-      fs.readdir('./data', function(error, filelist){
-        // readdir을 통해 filelist라는 배열 형태로 파일들을 불러올 수 있음. ['CSS', 'HTML', 'JavaScript']
-        var title = 'WEB - Create';
-        var list = template.list(filelist);
-        var html = template.HTML(title, list,`
-          <form action="/create_process" method="post">
-          <p><input type="text" name="title" placeholder="title"></p>
-          <p>
-              <textarea name="description" placeholder="description"></textarea>
-          </p>
-          <p>
-            <input type="submit">
-          </p>
-          </form>
-          `, '');
+    db.query(`SELECT * FROM topic`, function(error, topics){
+      if(error){throw error;}
+
+      var title = 'Create';
+      // template.js로 db에서 긁어온거 건네줌
+      var list = template.list(topics);
+      var html = template.HTML(title, list,
+        `<form action="/create_process" method="post">
+        <p><input type="text" name="title" placeholder="title"></p>
+        <p>
+            <textarea name="description" placeholder="description"></textarea>
+        </p>
+        <p>
+          <input type="submit">
+        </p>
+        </form>`,
+        `<a href="/create">create</a>`
+      );
       response.writeHead(200);
       response.end(html);
     });
@@ -95,40 +97,40 @@ var app = http.createServer(function(request,response){
       request.on('end', function(){
         // 데이터 수신이 끝날 시 post data에 post 정보를 넣어줌.
         var post = qs.parse(body);
-        var title = post.title;
-        var description = post.description;
         // post 데이터 기반 Write
-        fs.writeFile(`data/${title}`, description, 'utf8', function(err){
-          // 파일 저장 후 Redirection
-          response.writeHead(302, {Location: `/?id=${title}`});
+
+        db.query(`INSERT INTO topic (title, description, created, author_id) VALUES(?, ?, NOW(), ?)`, [post.title, post.description, 1], function(error, result){
+          if(error){throw error;}
+          response.writeHead(302, {Location: `/?id=${result.insertId}`});
           response.end();
-        });
+        })
       });
     } else if (pathname === '/update') {
-      fs.readdir('./data', function(error, filelist){
-        // queryData에서 id값을 받아온 뒤, 해당 id값에 해당하는 file을 불러와 description에 활용.
-        var filteredID = path.parse(queryData.id).base;
-        fs.readFile(`data/${filteredID}`, 'utf8', function(err, description){
-            var title = queryData.id;
-            var list = template.list(filelist);
-            var html = template.HTML(title, list,
-            `
-            <form action="/update_process" method="post">
-            <input type="hidden" name="id" value="${title}">
-            <p><input type="text" name="title" placeholder="title" value="${title}"></p>
-            <p>
-                <textarea name="description" placeholder="description" >${description}</textarea>
-            </p>
-            <p>
-              <input type="submit">
-            </p>
-            </form>
-            `,
-            `<a href="/create">create</a> <a href="/update?id=${title}">update</a>`);
-        response.writeHead(200);
-        response.end(html);
-        });
+    db.query(`SELECT * FROM topic`, function(error, topics){
+      if(error){throw error;}
+    // root가 아닌 경우. Content Reading 부분.
+    db.query(`SELECT * FROM topic WHERE id=?`,[queryData.id], function(error2, topic){
+      // queryData에서 id값을 받아온 뒤, 해당 id값에 해당하는 DB를 불러와 description에 활용.
+      if(error2){throw error2;}
+      // template.js로 db에서 긁어온거 건네줌
+      var list = template.list(topics);
+      var html = template.HTML(topic[0].title, topic[0].description,
+        `<form action="/update_process" method="post">
+        <input type="hidden" name="id" value="${topic[0].id}">
+        <p><input type="text" name="title" placeholder="title" value="${topic[0].title}"></p>
+        <p>
+            <textarea name="description" placeholder="description" >${topic[0].description}</textarea>
+        </p>
+        <p>
+          <input type="submit">
+        </p>
+        </form>`,
+        `<a href="/create">create</a> <a href="/update?id=${topic[0].id}">update</a>`
+      );
+      response.writeHead(200);
+      response.end(html);
     });
+  });
   } else if (pathname === '/update_process') {
     var body = '';
 
@@ -141,18 +143,12 @@ var app = http.createServer(function(request,response){
     request.on('end', function(){
       // 데이터 수신이 끝날 시 post data에 post 정보를 넣어줌.
       var post = qs.parse(body);
-      var id = post.id
-      var title = post.title;
-      var description = post.description;
-
-      fs.rename(`data/${id}`, `data/${title}`, function(error){
-        fs.writeFile(`data/${title}`, description, 'utf8', function(err){
-          // 파일 저장 후 Redirection
-          response.writeHead(302, {Location: `/?id=${title}`});
-          response.end('');
-        }); })
+      db.query(`UPDATE topic SET title=?,description=? WHERE id=?`, [post.title, post.description, post.id], function(error, result){
+        if(error){throw error;}
+        response.writeHead(302, {Location: `/?id=${post.id}`});
+        response.end();
+      });
     });
-
   } else if (pathname === '/delete_process') {
     var body = '';
 
@@ -167,9 +163,10 @@ var app = http.createServer(function(request,response){
       var post = qs.parse(body);
       var id = post.id
       // file delete
-      fs.unlink(`data/${id}`, function(error){
+      db.query(`DELETE FROM topic WHERE id=?`, [post.id], function(error, result){
+        if(error){throw error;}
         response.writeHead(302, {Location: `/`});
-        response.end('');
+        response.end();
       });
     });
   } else {
