@@ -1,11 +1,19 @@
 var http = require('http');
-var url = require('url')
+var url = require('url');
 var fs = require('fs');
 var qs = require('querystring');
 var path = require('path');
 var sanitizeHTML = require('sanitize-html');
+var mysql = require('mysql');
+var db = mysql.createConnection({
+  host:'localhost',
+  user:'root',
+  password:'111111',
+  database:'opentutorials'
+});
+db.connect();
 
-var template = require('./lib/template.js')
+var template = require('./lib/template.js');
 
 var app = http.createServer(function(request,response){
     var _url = request.url;
@@ -14,43 +22,45 @@ var app = http.createServer(function(request,response){
     if(pathname === '/'){
           // root의 경우
       if(queryData.id === undefined){
-        // /뒤의 내용이 undefined인 경우
-          fs.readdir('./data', function(error, filelist){
-            // readdir을 통해 filelist라는 배열 형태로 파일들을 불러올 수 있음. ['CSS', 'HTML', 'JavaScript']
-            var title = 'Welcome!';
-            var description = 'Hello, Node.js!';
+        // topic에서 모든걸 긁어와 객체와 쿼리
+        db.query(`SELECT * FROM topic`, function(error, topics){
+          if(error){throw error;}
 
-
-          var list = template.list(filelist);
+          var title = 'Welcome!';
+          var description = 'Hello, Node.js!';
+          // template.js로 db에서 긁어온거 건네줌
+          var list = template.list(topics);
           var html = template.HTML(title, list,
             `<h2>${title}</h2><p>${description}</p>`,
-            `<a href="/create">create</a>`);
-            response.writeHead(200);
-            response.end(html);
+            `<a href="/create">create</a>`
+          );
+          response.writeHead(200);
+          response.end(html);
         });
       } else {
-          // root가 아닌 경우. Content Reading 부분.
-          fs.readdir('./data', function(error, filelist){
-            // queryData에서 id값을 받아온 뒤, 해당 id값에 해당하는 file을 불러와 description에 활용.
-            var filteredID = path.parse(queryData.id).base;
-            fs.readFile(`data/${filteredID}`, 'utf8', function(err, description){
-                var title = queryData.id;
-                var sanitizedTitle = sanitizeHTML(title);
-                var sanitizedDescription = sanitizeHTML(description);
-                var list = template.list(filelist);
-                var html = template.HTML(title, list,
-                `<h2>${sanitizedTitle}</h2><p>${sanitizedDescription}</p>`,
-                `<a href="/create">create</a>
-                <a href="/update?id=${sanitizedTitle}">update</a>
-                <form action="delete_process" method="post">
-                  <input type="hidden" name="id" value="${sanitizedTitle}">
-                  <input type="submit" value="delete">
-                </form>
-                `);
-            response.writeHead(200);
-            response.end(html);
-            });
+        db.query(`SELECT * FROM topic`, function(error, topics){
+          if(error){throw error;}
+
+        // root가 아닌 경우. Content Reading 부분.
+        db.query(`SELECT * FROM topic WHERE id=?`,[queryData.id], function(error2, topic){
+          if(error2){throw error2;}
+          var title = topic[0].title;
+          var description = topic[0].description;
+          // template.js로 db에서 긁어온거 건네줌
+          var list = template.list(topics);
+          var html = template.HTML(title, list,
+            `<h2>${title}</h2><p>${description}</p>`,
+            `<a href="/create">create</a>
+              <a href="/update?id=${queryData.id}">update</a>
+              <form action="delete_process" method="post">
+                <input type="hidden" name="id" value="${queryData.id}">
+                <input type="submit" value="delete">
+              </form>`
+          );
+          response.writeHead(200);
+          response.end(html);
         });
+      });
       }
     } else if(pathname === '/create') {
       // Content Create(쓰기) 부분
