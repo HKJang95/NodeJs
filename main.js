@@ -31,6 +31,14 @@ var app = http.createServer(function(request,response){
       topic.delete_process(request, response);
     } else if (pathname === '/author') {
       author.home(request, response);
+    } else if (pathname === '/author_update') {
+      author.author_update(request, response);
+    } else if (pathname === '/author_create_process') {
+      author.author_create_process(request, response);
+    } else if (pathname === '/author_update_process') {
+      author.author_update_process(request, response);
+    } else if (pathname === '/author_delete_process') {
+      author.author_delete_process(request, response);
     } else {
       // 404 Error 처리
       response.writeHead(404);
