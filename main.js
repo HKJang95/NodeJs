@@ -1,13 +1,14 @@
 var express = require('express');
 
 var topic = require('./lib/topic');
-var author = require('./lib/author');
 var bodyparser = require('body-parser');
 var compression = require('compression');
 var db = require('./lib/db');
 var topicRouter = require('./routes/topic_route');
+var authorRouter = require('./routes/author_route');
 var helmet = require('helmet');
 const { response } = require('express');
+var usermgmt = require('./routes/usermgmt_route');
 
 var app = express();
 // middleware 사용 부분
@@ -31,9 +32,15 @@ app.get('*',function(request, response, next){
     next(); // 다음 미들웨어 실행
   });
 }); 
+app.use('/user', usermgmt);
 
 app.use('/topic', topicRouter);
 // topic router 사용 (./routes/topic_route.js)
+
+app.use('/author', authorRouter);
+// author router 사용
+
+
 
 // routing : 사용자가 path를 따라 들어올 때 적당한 대답을 해주는 것!
 app.get('/', function(request, response){
