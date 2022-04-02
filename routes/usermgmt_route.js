@@ -15,7 +15,7 @@ module.exports = function(passport){
   router.post('/login_process', passport.authenticate('local',{
     successRedirect : '/', 
     failureRedirect: '/user/login',
-    failureFlash: true
+    failureFlash: truekaav
     })
   );
 
