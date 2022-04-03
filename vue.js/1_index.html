@@ -28,15 +28,22 @@
     <div id="app" v-cloak> <!-- 여기에 마운트되어 이 태그 내부의 DOM요소를 컨트롤 할 수 있음. -->
         <!-- v-cloaK : vue요소가 DOM에 렌더되기 전까지 css에 명시된 방식으로 동작! ㄴ-->
         {{ greeting }} 
-        <!-- 위의 꺽쇠 두개는 Vue에서 변수를 사용하는 방법. 
+        <!-- 
+            위의 꺽쇠 두개는 Vue에서 변수를 사용하는 방법. 
             1. 우리가 options object에서 return하는 변수를 찾아본다. 
             2. greeting에 해당하는 변수를 찾아 사용!
         --> 
-        <input v-model="greeting" /> <!-- 각 태그의 원래 요소와 구분짓기 위해, v-sth 형식의 요소가 사용된다. -->
+        <input @keyup.enter="greet(greeting)" v-model="greeting" /> 
+        <!-- 각 태그의 원래 요소와 구분짓기 위해, v-sth 형식의 요소가 사용된다. -->
         <hr/>
+        <button @click="toggleBox">Toggle Box</button> <!-- @ == v-on: -->
         <div v-if="isVisible" class="box"></div>
+
+        <!-- 
         <div v-else-if="isVisible2" class="box two"></div>
-        <div v-else class="box three"></div> <!-- v-show와 v-if는 비슷하나, v-show가 성능면에서 좀 더 유리하다. -->
+        <div v-else class="box three"></div> <!-- v-show와 v-if는 비슷하나, v-show가 성능면에서 좀 더 유리하다. 
+        -->
+        
     </div>
     <script src="https://unpkg.com/vue@3"></script>
     <script>
@@ -45,7 +52,15 @@
                 return{
                     greeting: 'Hello Vue 3!',
                     isVisible: false,
-                    isVisible2 : false
+                    // isVisible2 : false
+                }
+            },
+            methods: {
+                toggleBox(){
+                    this.isVisible = !this.isVisible; // vue.js에서 사용되는 변수임을 명시해주기 위해, this는 필수이다.
+                }, 
+                greet(greeting){
+                    console.log(greeting);
                 }
             }
         });
